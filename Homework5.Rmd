@@ -109,6 +109,75 @@ ggplot(results, aes(x = city_state, y = estimate)) +
 
 
 ## Problem 2
+```{r message=FALSE, warning=FALSE}
+longitudinal = function(path,filename) {
+  
+  df = 
+    read_csv(path) |>
+    janitor::clean_names() |>
+    mutate(id = filename) |>
+    pivot_longer(
+      cols = -id,
+      names_to = "week",
+      values_to = "value",
+      names_prefix = "week_") |>
+    separate(id,c("arm", "subject_id"),  sep = "_") |>
+    mutate(
+      arm = recode(arm, con = "control", exp = "experimental"),
+      subject_id = gsub("\\.csv$","",subject_id))
+
+  df
+}
+```
+
+```{r message=FALSE, warning=FALSE}
+files = list.files("./datasets/study_data", full.names = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+tidied_df = 
+  purrr::map(files, ~ longitudinal(.x, basename(.x))) |> 
+  bind_rows()
+```
+
+```{r}
+tail(tidied_df)
+```
+Make sure weekly observations are tidy:
+```{r}
+tidied_df |>
+  group_by(week) |> 
+  summarise(n = n())
+```
+
+```{r}
+tidied_df |>
+  group_by(subject_id) |> 
+  summarise(n = n())   
+```
+
+```{r}
+tidied_df |>
+  group_by(week, subject_id) |> 
+  summarise(n = n())
+```
+Make a spaghetti plot:
+```{r}
+tidied_df |>
+  ggplot(aes(x = week, y = value, color = subject_id)) +
+  geom_line(aes(group = subject_id), se = FALSE) +
+  facet_grid(~arm) +
+  scale_color_brewer(palette = "Set3") + 
+  labs(x = "Week", y = "Value", title = "Value Change Across Two Groups")
+```
+Observations: 
+
+
+## Problem 3
+```{r}
+set.seed(1)
+```
+
 ```{r}
 
 ```
