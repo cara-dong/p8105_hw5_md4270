@@ -176,3 +176,174 @@ ggplot(results, aes(x = city_state, y = estimate)) +
 ![](Homework5_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ## Problem 2
+
+``` r
+longitudinal = function(path,filename) {
+  
+  df = 
+    read_csv(path) |>
+    janitor::clean_names() |>
+    mutate(id = filename) |>
+    pivot_longer(
+      cols = -id,
+      names_to = "week",
+      values_to = "value",
+      names_prefix = "week_") |>
+    separate(id,c("arm", "subject_id"),  sep = "_") |>
+    mutate(
+      arm = recode(arm, con = "control", exp = "experimental"),
+      subject_id = gsub("\\.csv$","",subject_id))
+
+  df
+}
+```
+
+``` r
+files = list.files("./datasets/study_data", full.names = TRUE)
+```
+
+``` r
+tidied_df = 
+  purrr::map(files, ~ longitudinal(.x, basename(.x))) |> 
+  bind_rows()
+```
+
+``` r
+tail(tidied_df)
+```
+
+    ## # A tibble: 6 × 4
+    ##   arm          subject_id week  value
+    ##   <chr>        <chr>      <chr> <dbl>
+    ## 1 experimental 10         3      2.8 
+    ## 2 experimental 10         4      4.3 
+    ## 3 experimental 10         5      2.25
+    ## 4 experimental 10         6      6.57
+    ## 5 experimental 10         7      6.09
+    ## 6 experimental 10         8      4.64
+
+Make sure weekly observations are tidy:
+
+``` r
+tidied_df |>
+  group_by(week) |> 
+  summarise(n = n())
+```
+
+    ## # A tibble: 8 × 2
+    ##   week      n
+    ##   <chr> <int>
+    ## 1 1        20
+    ## 2 2        20
+    ## 3 3        20
+    ## 4 4        20
+    ## 5 5        20
+    ## 6 6        20
+    ## 7 7        20
+    ## 8 8        20
+
+``` r
+tidied_df |>
+  group_by(subject_id) |> 
+  summarise(n = n())   
+```
+
+    ## # A tibble: 10 × 2
+    ##    subject_id     n
+    ##    <chr>      <int>
+    ##  1 01            16
+    ##  2 02            16
+    ##  3 03            16
+    ##  4 04            16
+    ##  5 05            16
+    ##  6 06            16
+    ##  7 07            16
+    ##  8 08            16
+    ##  9 09            16
+    ## 10 10            16
+
+``` r
+tidied_df |>
+  group_by(week, subject_id) |> 
+  summarise(n = n())
+```
+
+    ## `summarise()` has grouped output by 'week'. You can override using the
+    ## `.groups` argument.
+
+    ## # A tibble: 80 × 3
+    ## # Groups:   week [8]
+    ##    week  subject_id     n
+    ##    <chr> <chr>      <int>
+    ##  1 1     01             2
+    ##  2 1     02             2
+    ##  3 1     03             2
+    ##  4 1     04             2
+    ##  5 1     05             2
+    ##  6 1     06             2
+    ##  7 1     07             2
+    ##  8 1     08             2
+    ##  9 1     09             2
+    ## 10 1     10             2
+    ## # ℹ 70 more rows
+
+Make a spaghetti plot:
+
+``` r
+tidied_df |>
+  ggplot(aes(x = week, y = value, color = subject_id)) +
+  geom_line(aes(group = subject_id), se = FALSE) +
+  facet_grid(~arm) +
+  scale_color_brewer(palette = "Set3") + 
+  labs(x = "Week", y = "Value", title = "Value Change Across Two Groups", col = "Subject ID")
+```
+
+    ## Warning in geom_line(aes(group = subject_id), se = FALSE): Ignoring unknown
+    ## parameters: `se`
+
+![](Homework5_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+Observations:
+
+## Problem 3
+
+``` r
+set.seed(1)
+```
+
+``` r
+one_sample = function(mu, n = 30, sd = 5){
+  x = rnorm(n = n, mean = mu, sd = sd)
+  sim_result = t.test(x, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
+    broom::tidy() |> 
+    select(estimate, p.value)
+}
+```
+
+Repeat for all values of mu:
+
+``` r
+all_sample = 
+  expand_grid(mu = c(0,1,2,3,4,5,6), iter = 1:5000) |> 
+  mutate(estimate_df = map(mu, one_sample)) |> 
+  unnest(estimate_df) |> 
+  mutate(power = p.value < 0.05)
+```
+
+``` r
+all_sample
+```
+
+    ## # A tibble: 35,000 × 5
+    ##       mu  iter estimate p.value power
+    ##    <dbl> <int>    <dbl>   <dbl> <lgl>
+    ##  1     0     1    0.412  0.629  FALSE
+    ##  2     0     2    0.664  0.368  FALSE
+    ##  3     0     3    0.551  0.534  FALSE
+    ##  4     0     4    0.567  0.487  FALSE
+    ##  5     0     5   -1.65   0.0599 FALSE
+    ##  6     0     6    1.19   0.229  FALSE
+    ##  7     0     7    0.334  0.738  FALSE
+    ##  8     0     8   -1.19   0.209  FALSE
+    ##  9     0     9    0.122  0.887  FALSE
+    ## 10     0    10    0.684  0.472  FALSE
+    ## # ℹ 34,990 more rows
