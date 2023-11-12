@@ -11,18 +11,6 @@ library(tidyverse)
 
 ``` r
 homicide = read_csv("datasets/homicide-data.csv")
-```
-
-    ## Rows: 52179 Columns: 12
-    ## ── Column specification ────────────────────────────────────────────────────────
-    ## Delimiter: ","
-    ## chr (9): uid, victim_last, victim_first, victim_race, victim_age, victim_sex...
-    ## dbl (3): reported_date, lat, lon
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
-``` r
 head(homicide)
 ```
 
@@ -76,26 +64,20 @@ homicide_summarize
     ## # ℹ 40 more rows
 
 ``` r
-# Subset the data for Baltimore, MD
 homicide_prop_test = 
   homicide_clean |>
   filter(city_state == "Baltimore, MD")
 
-# Calculate the number of unsolved homicides
 unsolved_count = sum(homicide_prop_test$disposition %in% c("Closed without arrest", "Open/No arrest"))
 
-# The total number of homicides
 total_homicides = nrow(homicide_prop_test)
 
-# Perform the proportion test
 prop_test_result = prop.test(x = unsolved_count, n = total_homicides)
 ```
 
 ``` r
-# Use broom::tidy to tidy up the prop.test result
 tidy_result = broom::tidy(prop_test_result)
 
-# Pull the estimated proportion and confidence intervals
 tidy_result = 
   tidy_result |>
   select(estimate, conf.low, conf.high)
@@ -115,14 +97,12 @@ purrr::map2, list columns and unnest as necessary to create a tidy
 dataframe with estimated proportions and CIs for each city.
 
 ``` r
-# A function to run prop.test on the provided numbers
 run_prop_test = function(total, unsolved) {
   prop.test(x = unsolved, n = total)
 }
 ```
 
 ``` r
-# Now create a nested data frame grouped by city
 nested_data = 
   homicide_clean |>
   group_by(city_state) |>
@@ -132,7 +112,6 @@ nested_data =
 ```
 
 ``` r
-# Run the prop.test for each city and tidy the results
 results = 
   nested_data |>
   mutate(prop_test_results = map(data, ~run_prop_test(.x$total_homicide, .x$unsolved_homicide))) |>
@@ -140,7 +119,6 @@ results =
   select(city_state, tidy_results) |>
   unnest(tidy_results) |>
   select(city_state, estimate, conf.low, conf.high)
-#|> mutate(CI = paste(conf.low, conf.high, sep = ", "))
 
 head(results)
 ```
@@ -161,10 +139,8 @@ limits. Organize cities according to the proportion of unsolved
 homicides.
 
 ``` r
-# Make sure results have city_state as a factor ordered by the estimate
 results$city_state <- factor(results$city_state, levels = results$city_state[order(results$estimate)])
 
-# Create the plot
 ggplot(results, aes(x = city_state, y = estimate)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) +
@@ -207,20 +183,6 @@ tidied_df =
   purrr::map(files, ~ longitudinal(.x, basename(.x))) |> 
   bind_rows()
 ```
-
-``` r
-tail(tidied_df)
-```
-
-    ## # A tibble: 6 × 4
-    ##   arm          subject_id week  value
-    ##   <chr>        <chr>      <chr> <dbl>
-    ## 1 experimental 10         3      2.8 
-    ## 2 experimental 10         4      4.3 
-    ## 3 experimental 10         5      2.25
-    ## 4 experimental 10         6      6.57
-    ## 5 experimental 10         7      6.09
-    ## 6 experimental 10         8      4.64
 
 Make sure weekly observations are tidy:
 
@@ -268,9 +230,6 @@ tidied_df |>
   summarise(n = n())
 ```
 
-    ## `summarise()` has grouped output by 'week'. You can override using the
-    ## `.groups` argument.
-
     ## # A tibble: 80 × 3
     ## # Groups:   week [8]
     ##    week  subject_id     n
@@ -298,10 +257,8 @@ tidied_df |>
   labs(x = "Week", y = "Value", title = "Value Change Across Two Groups", col = "Subject ID")
 ```
 
-    ## Warning in geom_line(aes(group = subject_id), se = FALSE): Ignoring unknown
-    ## parameters: `se`
+![](Homework5_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
-![](Homework5_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 Observations:
 
 ## Problem 3
@@ -310,40 +267,97 @@ Observations:
 set.seed(1)
 ```
 
+Define a function to get the true simulated mu and sigma:
+
 ``` r
-one_sample = function(mu, n = 30, sd = 5){
-  x = rnorm(n = n, mean = mu, sd = sd)
-  sim_result = t.test(x, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
-    broom::tidy() |> 
-    select(estimate, p.value)
+true_mean_sd = function(n = 30, mu, sigma = 5) {
+  dataset = rnorm(n, mean = mu, sd = sigma)
+  table = data.frame(
+    true_mu = mean(dataset),
+    true_sigma = sd(dataset))
+  
+  table
 }
 ```
 
-Repeat for all values of mu:
+Conduct one-sample t-test for one dataset:
 
 ``` r
-all_sample = 
-  expand_grid(mu = c(0,1,2,3,4,5,6), iter = 1:5000) |> 
-  mutate(estimate_df = map(mu, one_sample)) |> 
-  unnest(estimate_df) |> 
-  mutate(power = p.value < 0.05)
+t_test = function(n = 30, mu, sigma = 5) {
+  dataset = rnorm(n, mean = mu, sd = sigma)
+  result = t.test(dataset, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
+    broom::tidy() |>
+    select(estimate, p.value)
+  
+  result
+}
+```
+
+Create a data frame to store the results:
+
+``` r
+result_df = data.frame(
+  mu = numeric(), 
+  mu_hat = numeric(), 
+  p_value = numeric(), 
+  rejected = logical())
 ```
 
 ``` r
-all_sample
+for (mu in c(0, 1, 2, 3, 4, 5, 6)) {
+  for (i in 1:5000) {
+    simulations = true_mean_sd(n=30, mu, sigma=5)
+    t_test_results = t_test(n=30, mu, sigma=5)
+    result_df = result_df |> 
+      add_row(mu = mu, 
+              mu_hat = simulations$true_mu,
+              p_value = t_test_results$p.value, 
+              rejected = t_test_results$p.value < 0.05)
+  }
+}
 ```
 
-    ## # A tibble: 35,000 × 5
-    ##       mu  iter estimate p.value power
-    ##    <dbl> <int>    <dbl>   <dbl> <lgl>
-    ##  1     0     1    0.412  0.629  FALSE
-    ##  2     0     2    0.664  0.368  FALSE
-    ##  3     0     3    0.551  0.534  FALSE
-    ##  4     0     4    0.567  0.487  FALSE
-    ##  5     0     5   -1.65   0.0599 FALSE
-    ##  6     0     6    1.19   0.229  FALSE
-    ##  7     0     7    0.334  0.738  FALSE
-    ##  8     0     8   -1.19   0.209  FALSE
-    ##  9     0     9    0.122  0.887  FALSE
-    ## 10     0    10    0.684  0.472  FALSE
-    ## # ℹ 34,990 more rows
+Create a plot for association between true_mu and rejected_prop
+
+``` r
+association = 
+  result_df |> 
+  group_by(mu) |> 
+  summarise(n_reject = sum(rejected==TRUE), 
+            total = n(), 
+            prop_reject = sum(rejected==TRUE)/total)
+
+head(association)
+```
+
+    ## # A tibble: 6 × 4
+    ##      mu n_reject total prop_reject
+    ##   <dbl>    <int> <int>       <dbl>
+    ## 1     0      274  5000      0.0548
+    ## 2     1      948  5000      0.190 
+    ## 3     2     2821  5000      0.564 
+    ## 4     3     4501  5000      0.900 
+    ## 5     4     4930  5000      0.986 
+    ## 6     5     4998  5000      1.00
+
+``` r
+association |>
+  ggplot(aes(x = mu, y = prop_reject)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Proportion that Rejected Null vs. True Mean", x = "True Mean (mu)", y = "Proportion that Rejected Null")
+```
+
+![](Homework5_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+The line plot above indicates a positive association between true value
+of mu and the proportion of times the null was rejected. As the true
+value of mu increases, the power of the test increases along with it.
+When mu reaches 5 and 6, almost all tests show an result of rejecting
+the null.
+
+Create a plot for average mu_hat vs mu:
+
+``` r
+# create a plot average estimate of μ̂ on the y axis and the true value of μ on the x axis for all samples
+```

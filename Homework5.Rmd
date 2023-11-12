@@ -4,16 +4,16 @@ author: "Manye Dong"
 date: "2023-11-06"
 output: github_document
 ---
-```{r message=FALSE}
+```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 ```
 
 ## Problem 1
-```{r}
+```{r message=FALSE, warning=FALSE}
 homicide = read_csv("datasets/homicide-data.csv")
 head(homicide)
 ```
-```{r}
+```{r message=FALSE, warning=FALSE}
 homicide_clean =
   homicide |>
   janitor::clean_names() |>
@@ -25,7 +25,7 @@ homicide_clean =
 
 The data has `r nrow(homicide_clean)` rows and `r ncol(homicide_clean)` columns. Important features include xxx
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 homicide_summarize = 
   homicide_clean |>
   group_by(city_state) |>
@@ -35,27 +35,21 @@ homicide_summarize =
 homicide_summarize
 ```
 
-```{r}
-# Subset the data for Baltimore, MD
+```{r message=FALSE, warning=FALSE}
 homicide_prop_test = 
   homicide_clean |>
   filter(city_state == "Baltimore, MD")
 
-# Calculate the number of unsolved homicides
 unsolved_count = sum(homicide_prop_test$disposition %in% c("Closed without arrest", "Open/No arrest"))
 
-# The total number of homicides
 total_homicides = nrow(homicide_prop_test)
 
-# Perform the proportion test
 prop_test_result = prop.test(x = unsolved_count, n = total_homicides)
 ```
 
-```{r}
-# Use broom::tidy to tidy up the prop.test result
+```{r message=FALSE, warning=FALSE}
 tidy_result = broom::tidy(prop_test_result)
 
-# Pull the estimated proportion and confidence intervals
 tidy_result = 
   tidy_result |>
   select(estimate, conf.low, conf.high)
@@ -63,15 +57,13 @@ tidy_result =
 tidy_result
 ```
 Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
-```{r}
-# A function to run prop.test on the provided numbers
+```{r message=FALSE, warning=FALSE}
 run_prop_test = function(total, unsolved) {
   prop.test(x = unsolved, n = total)
 }
 ```
 
-```{r}
-# Now create a nested data frame grouped by city
+```{r message=FALSE, warning=FALSE}
 nested_data = 
   homicide_clean |>
   group_by(city_state) |>
@@ -80,8 +72,7 @@ nested_data =
   nest(data = c(total_homicide, unsolved_homicide))
 ```
 
-```{r}
-# Run the prop.test for each city and tidy the results
+```{r message=FALSE, warning=FALSE}
 results = 
   nested_data |>
   mutate(prop_test_results = map(data, ~run_prop_test(.x$total_homicide, .x$unsolved_homicide))) |>
@@ -89,16 +80,13 @@ results =
   select(city_state, tidy_results) |>
   unnest(tidy_results) |>
   select(city_state, estimate, conf.low, conf.high)
-#|> mutate(CI = paste(conf.low, conf.high, sep = ", "))
 
 head(results)
 ```
 Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
-```{r fig.width=12, fig.height=8}
-# Make sure results have city_state as a factor ordered by the estimate
+```{r fig.width=12, fig.height=8, message=FALSE, warning=FALSE}
 results$city_state <- factor(results$city_state, levels = results$city_state[order(results$estimate)])
 
-# Create the plot
 ggplot(results, aes(x = city_state, y = estimate)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) +
@@ -140,29 +128,26 @@ tidied_df =
   bind_rows()
 ```
 
-```{r}
-tail(tidied_df)
-```
 Make sure weekly observations are tidy:
-```{r}
+```{r message=FALSE, warning=FALSE}
 tidied_df |>
   group_by(week) |> 
   summarise(n = n())
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 tidied_df |>
   group_by(subject_id) |> 
   summarise(n = n())   
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 tidied_df |>
   group_by(week, subject_id) |> 
   summarise(n = n())
 ```
 Make a spaghetti plot:
-```{r}
+```{r message=FALSE, warning=FALSE}
 tidied_df |>
   ggplot(aes(x = week, y = value, color = subject_id)) +
   geom_line(aes(group = subject_id), se = FALSE) +
@@ -175,12 +160,12 @@ Observations:
 
 
 ## Problem 3
-```{r}
+```{r message=FALSE, warning=FALSE}
 set.seed(1)
 ```
 
 Define a function to get the true simulated mu and sigma:
-```{r}
+```{r message=FALSE, warning=FALSE}
 true_mean_sd = function(n = 30, mu, sigma = 5) {
   dataset = rnorm(n, mean = mu, sd = sigma)
   table = data.frame(
@@ -192,7 +177,7 @@ true_mean_sd = function(n = 30, mu, sigma = 5) {
 ```
 
 Conduct one-sample t-test for one dataset:
-```{r}
+```{r message=FALSE, warning=FALSE}
 t_test = function(n = 30, mu, sigma = 5) {
   dataset = rnorm(n, mean = mu, sd = sigma)
   result = t.test(dataset, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
@@ -204,7 +189,7 @@ t_test = function(n = 30, mu, sigma = 5) {
 ```
 
 Create a data frame to store the results:
-```{r}
+```{r message=FALSE, warning=FALSE}
 result_df = data.frame(
   mu = numeric(), 
   mu_hat = numeric(), 
@@ -213,7 +198,7 @@ result_df = data.frame(
 ```
 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 for (mu in c(0, 1, 2, 3, 4, 5, 6)) {
   for (i in 1:5000) {
     simulations = true_mean_sd(n=30, mu, sigma=5)
@@ -227,12 +212,8 @@ for (mu in c(0, 1, 2, 3, 4, 5, 6)) {
 }
 ```
 
-```{r}
-result_df |> filter(mu==6)
-```
-
 Create a plot for association between true_mu and rejected_prop
-```{r}
+```{r message=FALSE, warning=FALSE}
 association = 
   result_df |> 
   group_by(mu) |> 
@@ -242,7 +223,7 @@ association =
 
 head(association)
 ```
-```{r}
+```{r message=FALSE, warning=FALSE}
 association |>
   ggplot(aes(x = mu, y = prop_reject)) +
   geom_point() +
@@ -250,10 +231,10 @@ association |>
   labs(title = "Proportion that Rejected Null vs. True Mean", x = "True Mean (mu)", y = "Proportion that Rejected Null")
 ```
 
-The graph illustrates a positive association between effect size and power: as the true mean, representing the effect size, increases, so does the power of the test. This reflects the principle that larger effects are easier to detect, thereby increasing the likelihood of correctly rejecting the null hypothesis when it is indeed false.
+The line plot above indicates a positive association between true value of mu and the proportion of times the null was rejected. As the true value of mu increases, the power of the test increases along with it. When mu reaches 5 and 6, almost all tests show an result of rejecting the null.
 
 Create a plot for average mu_hat vs mu:
-```{r}
+```{r message=FALSE, warning=FALSE}
 # create a plot average estimate of μ̂ on the y axis and the true value of μ on the x axis for all samples
 
 ```
