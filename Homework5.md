@@ -264,91 +264,46 @@ Observations:
 ## Problem 3
 
 ``` r
-set.seed(1)
+set.seed(42)
 ```
 
-Define a function to get the true simulated mu and sigma:
+Create a plot for association between true_mu and rejected_prop:
 
 ``` r
-true_mean_sd = function(n = 30, mu, sigma = 5) {
-  dataset = rnorm(n, mean = mu, sd = sigma)
-  table = data.frame(
-    true_mu = mean(dataset),
-    true_sigma = sd(dataset))
-  
-  table
-}
-```
-
-Conduct one-sample t-test for one dataset:
-
-``` r
-t_test = function(n = 30, mu, sigma = 5) {
-  dataset = rnorm(n, mean = mu, sd = sigma)
-  result = t.test(dataset, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
-    broom::tidy() |>
+one_sample = function(mu, n = 30, sd = 5){
+  x = rnorm(n = n, mean = mu, sd = sd)
+  result = t.test(x, mu = 0, alternative = "two.sided", conf.level = 0.95) |>
+    broom::tidy() |> 
     select(estimate, p.value)
-  
-  result
 }
 ```
 
-Create a data frame to store the results:
-
 ``` r
-result_df = data.frame(
-  mu = numeric(), 
-  mu_hat = numeric(), 
-  p_value = numeric(), 
-  rejected = logical())
+all_samples = 
+  expand_grid(mu = c(0,1,2,3,4,5,6), iter = 1:5000) |> 
+  mutate(df = map(mu, one_sample)) |> 
+  unnest(df) |> 
+  mutate(rejected = p.value < 0.05)
 ```
 
 ``` r
-for (mu in c(0, 1, 2, 3, 4, 5, 6)) {
-  for (i in 1:5000) {
-    simulations = true_mean_sd(n=30, mu, sigma=5)
-    t_test_results = t_test(n=30, mu, sigma=5)
-    result_df = result_df |> 
-      add_row(mu = mu, 
-              mu_hat = simulations$true_mu,
-              p_value = t_test_results$p.value, 
-              rejected = t_test_results$p.value < 0.05)
-  }
-}
+all_samples = 
+  all_samples |>
+  select(mu, estimate, p.value, rejected) |>
+  rename("mu_hat"="estimate", "p_value"="p.value")
 ```
 
-Create a plot for association between true_mu and rejected_prop
-
 ``` r
-association = 
-  result_df |> 
-  group_by(mu) |> 
-  summarise(n_reject = sum(rejected==TRUE), 
-            total = n(), 
-            prop_reject = sum(rejected==TRUE)/total)
-
-head(association)
-```
-
-    ## # A tibble: 6 × 4
-    ##      mu n_reject total prop_reject
-    ##   <dbl>    <int> <int>       <dbl>
-    ## 1     0      274  5000      0.0548
-    ## 2     1      948  5000      0.190 
-    ## 3     2     2821  5000      0.564 
-    ## 4     3     4501  5000      0.900 
-    ## 5     4     4930  5000      0.986 
-    ## 6     5     4998  5000      1.00
-
-``` r
-association |>
-  ggplot(aes(x = mu, y = prop_reject)) +
+all_samples |>  
+  group_by(mu) |>  
+  summarize(prop_rejected = mean(rejected)) |>
+  ggplot(aes(x = mu, y = prop_rejected)) +
   geom_point() +
   geom_line() +
   labs(title = "Proportion that Rejected Null vs. True Mean", x = "True Mean (mu)", y = "Proportion that Rejected Null")
 ```
 
-![](Homework5_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](Homework5_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 The line plot above indicates a positive association between true value
 of mu and the proportion of times the null was rejected. As the true
@@ -356,8 +311,32 @@ value of mu increases, the power of the test increases along with it.
 When mu reaches 5 and 6, almost all tests show an result of rejecting
 the null.
 
-Create a plot for average mu_hat vs mu:
-
 ``` r
-# create a plot average estimate of μ̂ on the y axis and the true value of μ on the x axis for all samples
+rejected_tests = 
+  all_samples |>
+  filter(rejected==TRUE) |>
+  group_by(mu) |>
+  summarise(avg_mu_hat = mean(mu_hat))
+
+
+all_tests = 
+  all_samples |> 
+  group_by(mu) |>
+  summarise(avg_mu_hat = mean(mu_hat))
+
+ggplot() +
+  geom_point(data = all_tests, aes(x = mu, y = avg_mu_hat), color = "lightblue") +
+  geom_line(data = all_tests, aes(x = mu, y = avg_mu_hat), color = "lightblue") +
+  geom_point(data = rejected_tests, aes(x = mu, y = avg_mu_hat), color = "darkgreen") +
+  geom_line(data = rejected_tests, aes(x = mu, y = avg_mu_hat), color = "darkgreen") +
+  labs(title = "Average mu_hat vs. True Mean (mu)", x = "True Mean (mu)", y = "Average mu_hat")
 ```
+
+![](Homework5_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
+The average estimate is very close to the true mean. The blue line is
+average estimate in which the null was rejected vs true mean. The sample
+average for rejected null is not approximately equal to the true value
+of mean when mean is 0, 1,2,3, and 4. It is because the power is not
+great enough. As the power increases, or the effect size increases, the
+sample average estimate is very close to the mean.
