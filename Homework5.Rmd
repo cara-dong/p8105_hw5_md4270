@@ -11,19 +11,20 @@ library(tidyverse)
 ## Problem 1
 ```{r message=FALSE, warning=FALSE}
 homicide = read_csv("datasets/homicide-data.csv")
-head(homicide)
 ```
 ```{r message=FALSE, warning=FALSE}
 homicide_clean =
   homicide |>
   janitor::clean_names() |>
-  mutate(state = replace(state, state == "wI", "WI")) |> 
+  mutate(state = replace(state, state == "wI", "WI"), 
+         state = if_else(uid == "Tul-000769", "OK", state)) |> 
   mutate(city_state = paste(city, state, sep = ", ")) |>
-  filter(city_state != "Tulsa, AL") |> 
   drop_na()
 ```
 
-The data has `r nrow(homicide_clean)` rows and `r ncol(homicide_clean)` columns. Important features include xxx
+The data has `r nrow(homicide_clean)` criminal homicides and `r ncol(homicide_clean)` columns from `r min(substr(homicide_clean$reported_date, 1, 4))` to `r max(substr(homicide_clean$reported_date, 1, 4))` in `r unique(homicide_clean$state)` States. It includes the reported date, location of the homicide (latitude, longitude, city and state), demographic information about each victim (first and last name, race, age, sex) and the disposition of each record.
+
+I modified the "Tulsa, AL" row because it is incorrectly put in the state of Alabama instead of Oklahama. Thus, I changed the state from AL to OK. I also detected that state WI is mistakenly written as wI, so I changed that as well.
 
 ```{r message=FALSE, warning=FALSE}
 homicide_summarize = 
@@ -32,9 +33,10 @@ homicide_summarize =
   summarise(total_homicide = n(), 
             unsolved_homicide = sum(disposition %in% c("Closed without arrest", "Open/No arrest")))
 
-homicide_summarize
+head(homicide_summarize)
 ```
 
+Run prop.test for Baltimore, MD:
 ```{r message=FALSE, warning=FALSE}
 homicide_prop_test = 
   homicide_clean |>
@@ -56,7 +58,7 @@ tidy_result =
 
 tidy_result
 ```
-Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
+Run prop.test for each of the cities and extract both the proportion of unsolved homicides and the confidence interval for each city_state:
 ```{r message=FALSE, warning=FALSE}
 run_prop_test = function(total, unsolved) {
   prop.test(x = unsolved, n = total)
@@ -83,7 +85,7 @@ results =
 
 head(results)
 ```
-Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+Create a plot that shows the estimates and CIs for each city. Organize cities according to the proportion of unsolved homicides:
 ```{r fig.width=12, fig.height=8, message=FALSE, warning=FALSE}
 results$city_state <- factor(results$city_state, levels = results$city_state[order(results$estimate)])
 
@@ -97,9 +99,9 @@ ggplot(results, aes(x = city_state, y = estimate)) +
 
 
 ## Problem 2
+Loading in data, add arm and make sure week variable is tidy:
 ```{r message=FALSE, warning=FALSE}
-longitudinal = function(path,filename) {
-  
+process = function(path,filename) {
   df = 
     read_csv(path) |>
     janitor::clean_names() |>
@@ -107,7 +109,7 @@ longitudinal = function(path,filename) {
     pivot_longer(
       cols = -id,
       names_to = "week",
-      values_to = "value",
+      values_to = "observation",
       names_prefix = "week_") |>
     separate(id,c("arm", "subject_id"),  sep = "_") |>
     mutate(
@@ -124,39 +126,23 @@ files = list.files("./datasets/study_data", full.names = TRUE)
 
 ```{r message=FALSE, warning=FALSE}
 tidied_df = 
-  purrr::map(files, ~ longitudinal(.x, basename(.x))) |> 
+  purrr::map(files, ~ process(.x, basename(.x))) |> 
   bind_rows()
+
+head(tidied_df)
 ```
 
-Make sure weekly observations are tidy:
-```{r message=FALSE, warning=FALSE}
-tidied_df |>
-  group_by(week) |> 
-  summarise(n = n())
-```
-
-```{r message=FALSE, warning=FALSE}
-tidied_df |>
-  group_by(subject_id) |> 
-  summarise(n = n())   
-```
-
-```{r message=FALSE, warning=FALSE}
-tidied_df |>
-  group_by(week, subject_id) |> 
-  summarise(n = n())
-```
 Make a spaghetti plot:
 ```{r message=FALSE, warning=FALSE}
 tidied_df |>
-  ggplot(aes(x = week, y = value, color = subject_id)) +
+  ggplot(aes(x = week, y = observation, color = subject_id)) +
   geom_line(aes(group = subject_id), se = FALSE) +
   facet_grid(~arm) +
   scale_color_brewer(palette = "Set3") + 
-  labs(x = "Week", y = "Value", title = "Value Change Across Two Groups", col = "Subject ID")
+  labs(x = "Week", y = "Value", title = "Observation Value Change Control vs Experiment", col = "Subject ID")
 ```
 
-Observations: 
+The values of observations for subjects in the experimental group seem to be overall increasing from Week 1 to Week 8, while the values of observations for subjects in the control group does not change much from Week 1 to Week 8, though in both groups the values are fluctuating.
 
 
 ## Problem 3
@@ -173,6 +159,8 @@ one_sample = function(mu, n = 30, sd = 5){
     select(estimate, p.value)
 }
 ```
+
+Repeat the above process for 5000 times:
 ```{r}
 all_samples = 
   expand_grid(mu = c(0,1,2,3,4,5,6), iter = 1:5000) |> 
@@ -181,14 +169,16 @@ all_samples =
   mutate(rejected = p.value < 0.05)
 ```
 
-```{r}
+Clean the result df:
+```{r message=FALSE, warning=FALSE}
 all_samples = 
   all_samples |>
   select(mu, estimate, p.value, rejected) |>
   rename("mu_hat"="estimate", "p_value"="p.value")
 ```
 
-```{r}
+Make a plot:
+```{r message=FALSE, warning=FALSE}
 all_samples |>  
   group_by(mu) |>  
   summarize(prop_rejected = mean(rejected)) |>
@@ -200,7 +190,8 @@ all_samples |>
 
 The line plot above indicates a positive association between true value of mu and the proportion of times the null was rejected. As the true value of mu increases, the power of the test increases along with it. When mu reaches 5 and 6, almost all tests show an result of rejecting the null.
 
-```{r}
+Make overlaid plots:
+```{r message=FALSE, warning=FALSE}
 rejected_tests = 
   all_samples |>
   filter(rejected==TRUE) |>
@@ -221,4 +212,6 @@ ggplot() +
   labs(title = "Average mu_hat vs. True Mean (mu)", x = "True Mean (mu)", y = "Average mu_hat")
 ```
 
-The average estimate is very close to the true mean. The blue line is average estimate in which the null was rejected vs true mean. The sample average for rejected null is not approximately equal to the true value of mean when mean is 0, 1,2,3, and 4. It is because the power is not great enough. As the power increases, or the effect size increases, the sample average estimate is very close to the mean.
+The average estimate seems very close to the true mean mu when mu is large. The average estimate for tests that reject null does not exactly align with the true mean when mu is less than or equal to 4. But as the true mean increases, the difference gets smaller and the mu_hat starts to be approximately equal to the true value of mu.
+
+The reason is that for smaller mu, it is more likely to have more estimates towards 0. This means that only those estimates away from 0 will reject the null hypothesis. This, in turn, makes the power very small for small value of mu. As mu increases, we would expect all or almost all tests to have reject null because more points will deviate from 0. Its power will then increase, making the two lines align with each other for larger mu.
